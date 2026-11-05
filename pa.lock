@@ -1,0 +1,5 @@
+# The PortAudio release this port builds on: fetched at build time, never shipped.
+PA_VERSION=19.7.0
+PA_URL=https://github.com/PortAudio/portaudio/archive/refs/tags/v19.7.0.tar.gz
+# checked at every fetch
+PA_SHA256=5af29ba58bbdbb7bbcefaaecc77ec8fc413f0db6f4c4e286c40c3e1b83174fa0
