@@ -3,7 +3,7 @@
  *
  * One device, ahi.device's unit 0 (the unit AHI's prefs give "music" by
  * default): up to two channels out and two in, 16-bit signed, any rate AHI
- * mixes at. A stream is a thread of its own that opens ahi.device, keeps two
+ * mixes at. A stream is a process of its own that opens ahi.device, keeps two
  * requests in flight each way (a write is linked to the one before it, so
  * AHI plays them back to back) and runs PortAudio's buffer processor between
  * them, which calls the program's callback and converts its samples.
@@ -13,8 +13,6 @@
  */
 
 #include <string.h>
-#include <stdio.h>
-#include <pthread.h>
 
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -23,6 +21,7 @@
 #include <dos/dos.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <dos/dostags.h>
 
 #include "portaudio.h"
 #include "pa_util.h"
@@ -72,8 +71,8 @@ typedef struct {
     unsigned long frames;           /* each host buffer */
     PaTime outLatency, inLatency;
 
-    pthread_t thread;
-    int threadMade;
+    int threadMade;                 /* the stream's process is running (or leaving) */
+    volatile int exited;            /* it has left: set under Forbid, as its last act */
     struct Task *task;              /* the stream's thread, for its signals */
     volatile int state;             /* 0 stopped, 1 starting, 2 running, -1 failed to start */
     volatile int stopRequest;       /* 1 stop (play what is queued), 2 abort */
@@ -192,9 +191,8 @@ static int ReadDone(struct PaAhiRequest *r, void *buf, unsigned long bytes)
     return 1;
 }
 
-static void *StreamThread(void *arg)
+static void StreamRun(PaAhiStream *s)
 {
-    PaAhiStream *s = (PaAhiStream *)arg;
     struct PaAhiIo out, in;
     const unsigned long outBytes = s->frames * (unsigned long)s->outChannels * 2;
     const unsigned long inBytes = s->frames * (unsigned long)s->inChannels * 2;
@@ -220,7 +218,7 @@ static void *StreamThread(void *arg)
         IoClose(&out, 1);
         s->state = -1;
         s->finished = 1;
-        return NULL;
+        return;
     }
     if (out.port) sigs |= 1UL << out.port->mp_SigBit;
     if (in.port) sigs |= 1UL << in.port->mp_SigBit;
@@ -236,7 +234,7 @@ static void *StreamThread(void *arg)
             IoClose(&out, 1);
             s->state = -1;
             s->finished = 1;
-            return NULL;
+            return;
         }
         in.req[1]->ahir_Std.io_Offset = in.req[0]->ahir_Std.io_Offset;
         Send(in.req[1], CMD_READ, in.buf[1], inBytes, inType, s->rate, NULL);
@@ -318,7 +316,24 @@ static void *StreamThread(void *arg)
     s->finished = 1;
     if (s->streamRepresentation.streamFinishedCallback)
         s->streamRepresentation.streamFinishedCallback(s->streamRepresentation.userData);
-    return NULL;
+    return;
+}
+
+/* The stream's process: its stream comes in tc_UserData (set under Forbid
+ * before it can run). It says it has gone as its last act, under Forbid, so
+ * nothing of it runs once StopThread sees that. */
+static void StreamProcess(void)
+{
+    PaAhiStream *s = (PaAhiStream *)FindTask(NULL)->tc_UserData;
+    StreamRun(s);
+    Forbid();
+    s->exited = 1;
+}
+
+static void JoinThread(PaAhiStream *s)
+{
+    while (!s->exited)
+        Delay(1);
 }
 
 /* ---- the stream's calls ---------------------------------------------------------------------- */
@@ -330,7 +345,7 @@ static PaError StopThread(PaAhiStream *s, int how)
     s->stopRequest = how;
     if (s->task && !s->finished)
         Signal(s->task, SIGBREAKF_CTRL_C);
-    pthread_join(s->thread, NULL);
+    JoinThread(s);
     s->threadMade = 0;
     s->task = NULL;
     s->state = 0;
@@ -347,16 +362,31 @@ static PaError StartStream(PaStream *stream)
     s->stopRequest = 0;
     s->finished = 0;
     s->state = 1;
-    if (pthread_create(&s->thread, NULL, StreamThread, s) != 0) {
+    s->exited = 0;
+    {
+        /* PortAudio's callback runs in it: a C++ program's callback wants a
+         * big stack. Its priority is its maker's. */
+        struct Process *proc;
+        Forbid();
+        proc = CreateNewProcTags(NP_Entry, (ULONG)StreamProcess, NP_Name, (ULONG)"PortAudio stream",
+                                 NP_StackSize, 262144, NP_Priority, (ULONG)(LONG)FindTask(NULL)->tc_Node.ln_Pri,
+                                 TAG_END);
+        if (proc)
+            proc->pr_Task.tc_UserData = s;
+        Permit();
+        if (!proc)
+            s->exited = 1;
+    }
+    if (s->exited) {
         s->state = 0;
-        SetHostError(-1, "the stream's thread could not be made");
+        SetHostError(-1, "the stream's process could not be made");
         return paUnanticipatedHostError;
     }
     s->threadMade = 1;
     while (s->state == 1)
         Delay(1);
     if (s->state < 0) {
-        pthread_join(s->thread, NULL);
+        JoinThread(s);
         s->threadMade = 0;
         s->state = 0;
         return paUnanticipatedHostError;
