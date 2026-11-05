@@ -81,19 +81,23 @@ static PaStreamParameters Output(void)
 
 int main(void)
 {
-    PaError err = Pa_Initialize();
+    PaError err;
     PaStream *stream = NULL;
     PaStreamParameters out;
     Sine sine;
     PaTime t0, t1;
     int i, n;
 
+    /* each line as it is printed: a run that stops part way shows where */
+    setvbuf(stdout, NULL, _IONBF, 0);
+    printf("     %s\n", Pa_GetVersionText());
+    err = Pa_Initialize();
+
     check(err == paNoError, "Pa_Initialize");
     if (err != paNoError) {
         printf("  %s\n", Pa_GetErrorText(err));
         return 1;
     }
-    printf("     %s\n", Pa_GetVersionText());
     n = Pa_GetDeviceCount();
     for (i = 0; i < n; i++) {
         const PaDeviceInfo *d = Pa_GetDeviceInfo(i);
