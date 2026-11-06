@@ -45,7 +45,9 @@ static struct timerequest s_timer;
  * libraries, through these bases; a program's start-up opens them, and a
  * library has none, so lib_init opens them itself. Without them the first
  * double sum (Pa_IsFormatSupported's rate check) called through a NULL base
- * and hung. */
+ * and hung. lib_open opens them, for the first program that opens it, not
+ * lib_init: lib_init runs in ramlib, and loading another library from disk
+ * there waits on ramlib itself. */
 extern struct Library *MathIeeeDoubBasBase, *MathIeeeDoubTransBase,
                       *MathIeeeSingBasBase, *MathIeeeSingTransBase;
 static struct Library **const s_mathBases[] = {
@@ -109,19 +111,15 @@ static struct Library *lib_init(REG(d0, struct PaLibBase *base), REG(a0, BPTR se
         lib_free(base);
         return NULL;
     }
-    {
-        unsigned i;
-        for (i = 0; i < sizeof s_mathBases / sizeof s_mathBases[0]; i++)
-            if (!(*s_mathBases[i] = OpenLibrary((CONST_STRPTR)s_mathNames[i], 37))) {
-                lib_free(base);
-                return NULL;
-            }
-    }
     return &base->lib;
 }
 
 static struct Library *lib_open(REG(a6, struct PaLibBase *base))
 {
+    unsigned i;
+    for (i = 0; i < sizeof s_mathBases / sizeof s_mathBases[0]; i++)
+        if (!*s_mathBases[i] && !(*s_mathBases[i] = OpenLibrary((CONST_STRPTR)s_mathNames[i], 37)))
+            return NULL;
     base->lib.lib_OpenCnt++;
     base->lib.lib_Flags &= ~LIBF_DELEXP;
     return &base->lib;
