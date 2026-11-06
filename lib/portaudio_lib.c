@@ -40,6 +40,21 @@ struct ExecBase *SysBase;
 struct DosLibrary *DOSBase;
 struct Device *TimerBase;
 static struct timerequest s_timer;
+
+/* libnix's soft float (libm020) does its sums through the mathieee
+ * libraries, through these bases; a program's start-up opens them, and a
+ * library has none, so lib_init opens them itself. Without them the first
+ * double sum (Pa_IsFormatSupported's rate check) called through a NULL base
+ * and hung. */
+extern struct Library *MathIeeeDoubBasBase, *MathIeeeDoubTransBase,
+                      *MathIeeeSingBasBase, *MathIeeeSingTransBase;
+static struct Library **const s_mathBases[] = {
+    &MathIeeeDoubBasBase, &MathIeeeDoubTransBase, &MathIeeeSingBasBase, &MathIeeeSingTransBase
+};
+static const char *const s_mathNames[] = {
+    "mathieeedoubbas.library", "mathieeedoubtrans.library",
+    "mathieeesingbas.library", "mathieeesingtrans.library"
+};
 static int s_timerOpen;
 
 /* Run as a program, the library does nothing. This must stay the first code
@@ -59,6 +74,14 @@ static void lib_free(struct PaLibBase *base)
         CloseDevice((struct IORequest *)&s_timer);
     s_timerOpen = 0;
     TimerBase = NULL;
+    {
+        unsigned i;
+        for (i = 0; i < sizeof s_mathBases / sizeof s_mathBases[0]; i++) {
+            if (*s_mathBases[i])
+                CloseLibrary(*s_mathBases[i]);
+            *s_mathBases[i] = NULL;
+        }
+    }
     if (DOSBase)
         CloseLibrary((struct Library *)DOSBase);
     DOSBase = NULL;
@@ -85,6 +108,14 @@ static struct Library *lib_init(REG(d0, struct PaLibBase *base), REG(a0, BPTR se
     if (!DOSBase || !TimerBase) {
         lib_free(base);
         return NULL;
+    }
+    {
+        unsigned i;
+        for (i = 0; i < sizeof s_mathBases / sizeof s_mathBases[0]; i++)
+            if (!(*s_mathBases[i] = OpenLibrary((CONST_STRPTR)s_mathNames[i], 37))) {
+                lib_free(base);
+                return NULL;
+            }
     }
     return &base->lib;
 }
