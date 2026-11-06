@@ -43,7 +43,7 @@ static struct timerequest s_timer;
 
 /* libnix's soft float (libm020) does its sums through the mathieee
  * libraries, through these bases; a program's start-up opens them, and a
- * library has none, so lib_init opens them itself. Without them the first
+ * library has none, so it opens them itself. Without them the first
  * double sum (Pa_IsFormatSupported's rate check) called through a NULL base
  * and hung. lib_open opens them, for the first program that opens it, not
  * lib_init: lib_init runs in ramlib, and loading another library from disk
