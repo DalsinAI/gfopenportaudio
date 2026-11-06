@@ -1,0 +1,42 @@
+* portaudio.library (GFOpenPortAudio), written by make-stubs.py
+* The calls take their arguments on the stack, as PortAudio's C functions
+* do (portaudio.h): call the vector as a C function. No registers.
+##base _PortAudioBase
+##bias 30
+##public
+Pa_GetVersion()()
+Pa_GetVersionText()()
+Pa_GetVersionInfo()()
+Pa_GetErrorText(errorCode)()
+Pa_Initialize()()
+Pa_Terminate()()
+Pa_GetHostApiCount()()
+Pa_GetDefaultHostApi()()
+Pa_GetHostApiInfo(hostApi)()
+Pa_HostApiTypeIdToHostApiIndex(type)()
+Pa_HostApiDeviceIndexToDeviceIndex(hostApi,hostApiDeviceIndex)()
+Pa_GetLastHostErrorInfo()()
+Pa_GetDeviceCount()()
+Pa_GetDefaultInputDevice()()
+Pa_GetDefaultOutputDevice()()
+Pa_GetDeviceInfo(device)()
+Pa_IsFormatSupported(inputParameters,outputParameters,sampleRate)()
+Pa_OpenStream(stream,inputParameters,outputParameters,sampleRate,framesPerBuffer,streamFlags,streamCallback,userData)()
+Pa_OpenDefaultStream(stream,numInputChannels,numOutputChannels,sampleFormat,sampleRate,framesPerBuffer,streamCallback,userData)()
+Pa_CloseStream(stream)()
+Pa_SetStreamFinishedCallback(stream,streamFinishedCallback)()
+Pa_StartStream(stream)()
+Pa_StopStream(stream)()
+Pa_AbortStream(stream)()
+Pa_IsStreamStopped(stream)()
+Pa_IsStreamActive(stream)()
+Pa_GetStreamInfo(stream)()
+Pa_GetStreamTime(stream)()
+Pa_GetStreamCpuLoad(stream)()
+Pa_ReadStream(stream,buffer,frames)()
+Pa_WriteStream(stream,buffer,frames)()
+Pa_GetStreamReadAvailable(stream)()
+Pa_GetStreamWriteAvailable(stream)()
+Pa_GetSampleSize(format)()
+Pa_Sleep(msec)()
+##end

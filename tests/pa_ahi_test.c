@@ -9,6 +9,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
@@ -16,8 +17,23 @@
 
 static int s_pass, s_fail;
 
+/* each step also goes to T:pa_ahi_test.trace, closed after each line, so a
+ * run that hangs leaves where it got to (set PA_TRACE to have it) */
+static int s_trace = -1;
+static void trace(const char *what)
+{
+    FILE *f;
+    if (s_trace < 0)
+        s_trace = getenv("PA_TRACE") != NULL;
+    if (!s_trace || !(f = fopen("T:pa_ahi_test.trace", "a")))
+        return;
+    fprintf(f, "%s\n", what);
+    fclose(f);
+}
+
 static void check(int ok, const char *what)
 {
+    trace(what);
     printf("%s %s\n", ok ? "ok  " : "FAIL", what);
     if (ok) s_pass++; else s_fail++;
 }
@@ -81,19 +97,25 @@ static PaStreamParameters Output(void)
 
 int main(void)
 {
-    PaError err = Pa_Initialize();
+    PaError err;
     PaStream *stream = NULL;
     PaStreamParameters out;
     Sine sine;
     PaTime t0, t1;
     int i, n;
 
+    /* each line as it is printed: a run that stops part way shows where */
+    setvbuf(stdout, NULL, _IONBF, 0);
+    trace("main");
+    printf("     %s\n", Pa_GetVersionText());
+    trace("Pa_GetVersionText");
+    err = Pa_Initialize();
+
     check(err == paNoError, "Pa_Initialize");
     if (err != paNoError) {
         printf("  %s\n", Pa_GetErrorText(err));
         return 1;
     }
-    printf("     %s\n", Pa_GetVersionText());
     n = Pa_GetDeviceCount();
     for (i = 0; i < n; i++) {
         const PaDeviceInfo *d = Pa_GetDeviceInfo(i);
